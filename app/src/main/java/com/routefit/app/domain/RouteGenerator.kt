@@ -30,9 +30,9 @@ class RouteGenerator(private val routeProvider: RouteProvider) {
 
         val baseline = routeProvider.getWalkingRoute(start, end) ?: return emptyList()
 
-        if (abs(baseline.distanceMeters - targetDistanceMeters) <= toleranceMeters) {
-            results.add(baseline)
-        }
+        // Always include the baseline so the scorer has at least one option even when no
+        // waypoint candidate lands close to the target distance.
+        results.add(baseline)
 
         val isLoop = isLoopRoute(start, end)
         val waypointSets = if (isLoop) {

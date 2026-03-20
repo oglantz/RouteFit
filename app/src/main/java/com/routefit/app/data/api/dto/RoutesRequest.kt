@@ -9,10 +9,10 @@ data class ComputeRoutesRequest(
     val routeModifiers: RouteModifiersDto = RouteModifiersDto()
 )
 
+// avoidHighways and avoidTolls are not valid for WALK travel mode and will cause
+// a validation error from the Routes API even when set to false — omit them entirely.
 data class RouteModifiersDto(
-    val avoidFerries: Boolean = true,
-    val avoidHighways: Boolean = false,
-    val avoidTolls: Boolean = false
+    val avoidFerries: Boolean = true
 )
 
 data class WaypointDto(
