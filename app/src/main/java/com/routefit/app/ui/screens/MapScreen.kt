@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,7 +22,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -31,7 +31,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +52,7 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
@@ -108,6 +108,13 @@ fun MapScreen(viewModel: MapViewModel) {
         Color(0xFF4CAF50),
         Color(0xFFFF9800)
     )
+    val isSheetExpanded = scaffoldState.bottomSheetState.currentValue == SheetValue.Expanded
+    val mapUiSettings = MapUiSettings(zoomControlsEnabled = true)
+    val mapContentPadding = if (isSheetExpanded) {
+        PaddingValues(bottom = 320.dp)
+    } else {
+        PaddingValues(bottom = 100.dp)
+    }
 
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
@@ -384,6 +391,8 @@ fun MapScreen(viewModel: MapViewModel) {
             GoogleMap(
                 modifier = Modifier.fillMaxSize(),
                 cameraPositionState = cameraPositionState,
+                uiSettings = mapUiSettings,
+                contentPadding = mapContentPadding,
                 onMapClick = { latLng -> viewModel.onMapTap(latLng) }
             ) {
                 startLocation?.let {
@@ -417,7 +426,6 @@ fun MapScreen(viewModel: MapViewModel) {
                     }
                 }
             }
-
         }
     }
 }
