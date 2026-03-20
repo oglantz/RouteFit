@@ -31,6 +31,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import java.util.Locale
 
 class MapViewModel : ViewModel() {
 
@@ -115,6 +116,8 @@ class MapViewModel : ViewModel() {
 
     fun setStartLocation(location: AppLocation) {
         _startLocation.value = location
+        _startSearchQuery.value = location.address ?: formatCoordinateLabel(location)
+        _startPredictions.value = emptyList()
         _selectionMode.value =
             if (_endLocation.value == null) SelectionMode.END else SelectionMode.NONE
         clearRoutes()
@@ -122,21 +125,23 @@ class MapViewModel : ViewModel() {
 
     fun setEndLocation(location: AppLocation) {
         _endLocation.value = location
+        _endSearchQuery.value = location.address ?: formatCoordinateLabel(location)
+        _endPredictions.value = emptyList()
         _selectionMode.value = SelectionMode.NONE
         clearRoutes()
     }
 
     fun onMapTap(latLng: LatLng) {
-        val location = AppLocation(latLng.latitude, latLng.longitude)
+        val location = AppLocation(
+            latLng.latitude,
+            latLng.longitude,
+            formatCoordinateLabel(latLng.latitude, latLng.longitude)
+        )
         when (_selectionMode.value) {
             SelectionMode.START -> {
-                _startSearchQuery.value = ""
-                _startPredictions.value = emptyList()
                 setStartLocation(location)
             }
             SelectionMode.END -> {
-                _endSearchQuery.value = ""
-                _endPredictions.value = emptyList()
                 setEndLocation(location)
             }
             SelectionMode.NONE -> {}
@@ -308,5 +313,13 @@ class MapViewModel : ViewModel() {
         return _startLocation.value != null &&
                 _endLocation.value != null &&
                 (_targetDistance.value.toDoubleOrNull() ?: 0.0) > 0
+    }
+
+    private fun formatCoordinateLabel(location: AppLocation): String {
+        return formatCoordinateLabel(location.latitude, location.longitude)
+    }
+
+    private fun formatCoordinateLabel(latitude: Double, longitude: Double): String {
+        return String.format(Locale.US, "%.5f, %.5f", latitude, longitude)
     }
 }

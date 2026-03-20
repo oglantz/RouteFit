@@ -418,29 +418,6 @@ fun MapScreen(viewModel: MapViewModel) {
                 }
             }
 
-            // Selection mode badge on the map
-            if (selectionMode != MapViewModel.SelectionMode.NONE) {
-                val badgeText = when (selectionMode) {
-                    MapViewModel.SelectionMode.START -> "Tap to set START"
-                    MapViewModel.SelectionMode.END -> "Tap to set END"
-                    else -> ""
-                }
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 16.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shadowElevation = 4.dp
-                ) {
-                    Text(
-                        text = badgeText,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
         }
     }
 }
