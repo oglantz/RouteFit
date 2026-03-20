@@ -1,5 +1,6 @@
 package com.routefit.app.data.repository
 
+import android.util.Log
 import com.routefit.app.data.api.RoutesApiService
 import com.routefit.app.data.api.dto.ComputeRoutesRequest
 import com.routefit.app.data.api.dto.LatLngDto

@@ -5,15 +5,10 @@ data class ComputeRoutesRequest(
     val destination: WaypointDto,
     val intermediates: List<WaypointDto>? = null,
     val travelMode: String = "WALK",
-    val computeAlternativeRoutes: Boolean = false,
-    val routeModifiers: RouteModifiersDto = RouteModifiersDto()
+    val computeAlternativeRoutes: Boolean = false
 )
-
-// avoidHighways and avoidTolls are not valid for WALK travel mode and will cause
-// a validation error from the Routes API even when set to false — omit them entirely.
-data class RouteModifiersDto(
-    val avoidFerries: Boolean = true
-)
+// routeModifiers is intentionally omitted: avoidFerries/avoidHighways/avoidTolls are all
+// invalid for WALK travel mode in the Routes API v2 and cause a 400 validation error.
 
 data class WaypointDto(
     val location: LocationWrapperDto
