@@ -49,6 +49,17 @@ android {
     }
 }
 
+// Force newer vectordrawable versions to resolve a namespace collision introduced
+// by the Places SDK pulling in vectordrawable-animated:1.0.0, which shared the
+// androidx.vectordrawable namespace with vectordrawable:1.0.0. AGP 9 treats
+// duplicate namespaces as a hard error; 1.2.0 gives each library its own namespace.
+configurations.all {
+    resolutionStrategy {
+        force("androidx.vectordrawable:vectordrawable:1.2.0")
+        force("androidx.vectordrawable:vectordrawable-animated:1.2.0")
+    }
+}
+
 dependencies {
     val composeBom = platform(libs.compose.bom)
     implementation(composeBom)
@@ -78,4 +89,6 @@ dependencies {
 
     implementation(libs.coroutines.android)
     implementation(libs.coroutines.core)
+
+    implementation(libs.places)
 }

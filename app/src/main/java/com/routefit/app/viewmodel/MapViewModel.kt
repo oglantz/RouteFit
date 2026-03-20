@@ -3,6 +3,11 @@ package com.routefit.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.libraries.places.api.model.AutocompletePrediction
+import com.google.android.libraries.places.api.model.Place
+import com.google.android.libraries.places.api.net.FetchPlaceRequest
+import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
+import com.google.android.libraries.places.api.net.PlacesClient
 import com.routefit.app.data.api.RoutesApiService
 import com.routefit.app.data.repository.RouteRepository
 import com.routefit.app.domain.RouteGenerator
@@ -12,8 +17,14 @@ import com.routefit.app.model.RouteInfo
 import com.routefit.app.utils.DistanceUtils
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -50,32 +61,57 @@ class MapViewModel : ViewModel() {
     private val _selectionMode = MutableStateFlow(SelectionMode.START)
     val selectionMode: StateFlow<SelectionMode> = _selectionMode.asStateFlow()
 
+    // Search state
+    private val _startSearchQuery = MutableStateFlow("")
+    val startSearchQuery: StateFlow<String> = _startSearchQuery.asStateFlow()
+
+    private val _endSearchQuery = MutableStateFlow("")
+    val endSearchQuery: StateFlow<String> = _endSearchQuery.asStateFlow()
+
+    private val _startPredictions = MutableStateFlow<List<AutocompletePrediction>>(emptyList())
+    val startPredictions: StateFlow<List<AutocompletePrediction>> = _startPredictions.asStateFlow()
+
+    private val _endPredictions = MutableStateFlow<List<AutocompletePrediction>>(emptyList())
+    val endPredictions: StateFlow<List<AutocompletePrediction>> = _endPredictions.asStateFlow()
+
+    // Emits a LatLng whenever the camera should animate to a searched location
+    private val _cameraTarget = MutableSharedFlow<LatLng>()
+    val cameraTarget: SharedFlow<LatLng> = _cameraTarget.asSharedFlow()
+
     enum class SelectionMode { START, END, NONE }
 
     private var routeRepository: RouteRepository? = null
+    private var placesClient: PlacesClient? = null
+    private var startSearchJob: Job? = null
+    private var endSearchJob: Job? = null
 
-    fun initialize(apiKey: String) {
+    fun initialize(apiKey: String, client: PlacesClient) {
+        placesClient = client
         if (routeRepository != null) return
 
-        val moshi = Moshi.Builder()
-            .add(KotlinJsonAdapterFactory())
-            .build()
+        viewModelScope.launch(Dispatchers.IO) {
+            val moshi = Moshi.Builder()
+                .add(KotlinJsonAdapterFactory())
+                .build()
 
-        val client = OkHttpClient.Builder()
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
-            })
-            .build()
+            val httpClient = OkHttpClient.Builder()
+                .addInterceptor(HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BODY
+                })
+                .build()
 
-        val retrofit = Retrofit.Builder()
-            .baseUrl("https://routes.googleapis.com/")
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
+            val retrofit = Retrofit.Builder()
+                .baseUrl("https://routes.googleapis.com/")
+                .client(httpClient)
+                .addConverterFactory(MoshiConverterFactory.create(moshi))
+                .build()
 
-        val apiService = retrofit.create(RoutesApiService::class.java)
-        routeRepository = RouteRepository(apiService, apiKey)
+            val apiService = retrofit.create(RoutesApiService::class.java)
+            routeRepository = RouteRepository(apiService, apiKey)
+        }
     }
+
+    // region Location setting
 
     fun setStartLocation(location: AppLocation) {
         _startLocation.value = location
@@ -90,6 +126,115 @@ class MapViewModel : ViewModel() {
         clearRoutes()
     }
 
+    fun onMapTap(latLng: LatLng) {
+        val location = AppLocation(latLng.latitude, latLng.longitude)
+        when (_selectionMode.value) {
+            SelectionMode.START -> {
+                _startSearchQuery.value = ""
+                _startPredictions.value = emptyList()
+                setStartLocation(location)
+            }
+            SelectionMode.END -> {
+                _endSearchQuery.value = ""
+                _endPredictions.value = emptyList()
+                setEndLocation(location)
+            }
+            SelectionMode.NONE -> {}
+        }
+    }
+
+    // endregion
+
+    // region Search / autocomplete
+
+    fun onStartSearchChange(query: String) {
+        _startSearchQuery.value = query
+        startSearchJob?.cancel()
+        if (query.isBlank()) {
+            _startPredictions.value = emptyList()
+            return
+        }
+        startSearchJob = viewModelScope.launch {
+            delay(300)
+            fetchPredictions(query, isStart = true)
+        }
+    }
+
+    fun onEndSearchChange(query: String) {
+        _endSearchQuery.value = query
+        endSearchJob?.cancel()
+        if (query.isBlank()) {
+            _endPredictions.value = emptyList()
+            return
+        }
+        endSearchJob = viewModelScope.launch {
+            delay(300)
+            fetchPredictions(query, isStart = false)
+        }
+    }
+
+    private fun fetchPredictions(query: String, isStart: Boolean) {
+        val client = placesClient ?: return
+        val request = FindAutocompletePredictionsRequest.builder()
+            .setQuery(query)
+            .build()
+        client.findAutocompletePredictions(request)
+            .addOnSuccessListener { response ->
+                if (isStart) {
+                    _startPredictions.value = response.autocompletePredictions
+                } else {
+                    _endPredictions.value = response.autocompletePredictions
+                }
+            }
+            .addOnFailureListener { /* Silently ignore prediction errors */ }
+    }
+
+    fun selectPrediction(placeId: String, primaryText: String, isStart: Boolean) {
+        val client = placesClient ?: return
+        val placeFields = listOf(Place.Field.LOCATION, Place.Field.ADDRESS)
+        val request = FetchPlaceRequest.newInstance(placeId, placeFields)
+        client.fetchPlace(request)
+            .addOnSuccessListener { response ->
+                val place = response.place
+                val latLng = place.location ?: return@addOnSuccessListener
+                val address = place.formattedAddress ?: primaryText
+                val location = AppLocation(latLng.latitude, latLng.longitude, address)
+                if (isStart) {
+                    _startSearchQuery.value = address
+                    _startPredictions.value = emptyList()
+                    setStartLocation(location)
+                } else {
+                    _endSearchQuery.value = address
+                    _endPredictions.value = emptyList()
+                    setEndLocation(location)
+                }
+                viewModelScope.launch { _cameraTarget.emit(latLng) }
+            }
+            .addOnFailureListener { e ->
+                _error.value = "Could not find location: ${e.message}"
+            }
+    }
+
+    fun clearStartSearch() {
+        startSearchJob?.cancel()
+        _startSearchQuery.value = ""
+        _startPredictions.value = emptyList()
+        _startLocation.value = null
+        _selectionMode.value = SelectionMode.START
+        clearRoutes()
+    }
+
+    fun clearEndSearch() {
+        endSearchJob?.cancel()
+        _endSearchQuery.value = ""
+        _endPredictions.value = emptyList()
+        _endLocation.value = null
+        if (_startLocation.value != null) _selectionMode.value = SelectionMode.END
+        clearRoutes()
+    }
+
+    // endregion
+
     fun setTargetDistance(value: String) {
         _targetDistance.value = value
     }
@@ -100,15 +245,6 @@ class MapViewModel : ViewModel() {
 
     fun selectRoute(index: Int) {
         _selectedRouteIndex.value = index
-    }
-
-    fun onMapTap(latLng: LatLng) {
-        val location = AppLocation(latLng.latitude, latLng.longitude)
-        when (_selectionMode.value) {
-            SelectionMode.START -> setStartLocation(location)
-            SelectionMode.END -> setEndLocation(location)
-            SelectionMode.NONE -> {}
-        }
     }
 
     fun generateRoutes() {
@@ -155,6 +291,10 @@ class MapViewModel : ViewModel() {
     fun resetMarkers() {
         _startLocation.value = null
         _endLocation.value = null
+        _startSearchQuery.value = ""
+        _endSearchQuery.value = ""
+        _startPredictions.value = emptyList()
+        _endPredictions.value = emptyList()
         _selectionMode.value = SelectionMode.START
         clearRoutes()
     }

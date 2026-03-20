@@ -23,15 +23,18 @@ import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -49,6 +53,7 @@ import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.routefit.app.ui.components.DistanceInput
+import com.routefit.app.ui.components.LocationSearchBar
 import com.routefit.app.ui.components.RouteCard
 import com.routefit.app.utils.DistanceUtils
 import com.routefit.app.utils.GoogleMapsExporter
@@ -66,10 +71,23 @@ fun MapScreen(viewModel: MapViewModel) {
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
     val selectionMode by viewModel.selectionMode.collectAsStateWithLifecycle()
+    val startSearchQuery by viewModel.startSearchQuery.collectAsStateWithLifecycle()
+    val endSearchQuery by viewModel.endSearchQuery.collectAsStateWithLifecycle()
+    val startPredictions by viewModel.startPredictions.collectAsStateWithLifecycle()
+    val endPredictions by viewModel.endPredictions.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(LatLng(37.7749, -122.4194), 14f)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.cameraTarget.collect { target ->
+            cameraPositionState.animate(
+                CameraUpdateFactory.newLatLngZoom(target, 15f),
+                durationMs = 600
+            )
+        }
     }
 
     val scaffoldState = rememberBottomSheetScaffoldState(
@@ -86,7 +104,7 @@ fun MapScreen(viewModel: MapViewModel) {
 
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
-        sheetPeekHeight = 220.dp,
+        sheetPeekHeight = 280.dp,
         sheetContent = {
             Column(
                 modifier = Modifier
@@ -94,6 +112,7 @@ fun MapScreen(viewModel: MapViewModel) {
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .verticalScroll(rememberScrollState())
             ) {
+                // Drag handle
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
@@ -105,54 +124,84 @@ fun MapScreen(viewModel: MapViewModel) {
                         )
                 )
 
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Title row with reset button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Directions",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    if (startLocation != null || endLocation != null) {
+                        TextButton(onClick = { viewModel.resetMarkers() }) {
+                            Text("Reset")
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
 
-                val hintText = when {
-                    startLocation == null -> "Tap the map to set your starting point"
-                    endLocation == null -> "Tap the map to set your ending point"
-                    else -> "Set your target distance and generate routes"
-                }
-                Text(
-                    text = hintText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                // Start location search
+                LocationSearchBar(
+                    query = startSearchQuery,
+                    onQueryChange = { viewModel.onStartSearchChange(it) },
+                    predictions = startPredictions,
+                    onPredictionSelected = { placeId, primaryText ->
+                        viewModel.selectPrediction(placeId, primaryText, isStart = true)
+                    },
+                    onClear = { viewModel.clearStartSearch() },
+                    placeholder = "Start location",
+                    leadingIconTint = Color(0xFF4CAF50),
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                // Visual connector between start and end
+                Box(
+                    modifier = Modifier
+                        .padding(start = 18.dp)
+                        .width(2.dp)
+                        .height(12.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                )
 
-                startLocation?.let { loc ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            "Start: %.4f, %.4f".format(loc.latitude, loc.longitude),
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                // End location search
+                LocationSearchBar(
+                    query = endSearchQuery,
+                    onQueryChange = { viewModel.onEndSearchChange(it) },
+                    predictions = endPredictions,
+                    onPredictionSelected = { placeId, primaryText ->
+                        viewModel.selectPrediction(placeId, primaryText, isStart = false)
+                    },
+                    onClear = { viewModel.clearEndSearch() },
+                    placeholder = "End location",
+                    leadingIconTint = Color(0xFFF44336),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Tap-to-set hint
+                if (selectionMode != MapViewModel.SelectionMode.NONE) {
+                    val hintText = when (selectionMode) {
+                        MapViewModel.SelectionMode.START -> "Or tap the map to set your start"
+                        MapViewModel.SelectionMode.END -> "Or tap the map to set your end"
+                        else -> ""
                     }
+                    Text(
+                        text = hintText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp, start = 4.dp)
+                    )
                 }
 
-                endLocation?.let { loc ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Place,
-                            contentDescription = null,
-                            tint = Color(0xFFF44336),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            "End: %.4f, %.4f".format(loc.latitude, loc.longitude),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(16.dp))
 
-                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 DistanceInput(
                     distance = targetDistance,
@@ -161,7 +210,7 @@ fun MapScreen(viewModel: MapViewModel) {
                     onUnitChange = { viewModel.setDistanceUnit(it) }
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
                     onClick = { viewModel.generateRoutes() },
@@ -244,7 +293,7 @@ fun MapScreen(viewModel: MapViewModel) {
                 startLocation?.let {
                     Marker(
                         state = MarkerState(position = LatLng(it.latitude, it.longitude)),
-                        title = "Start",
+                        title = it.address ?: "Start",
                         icon = BitmapDescriptorFactory.defaultMarker(
                             BitmapDescriptorFactory.HUE_GREEN
                         )
@@ -254,47 +303,26 @@ fun MapScreen(viewModel: MapViewModel) {
                 endLocation?.let {
                     Marker(
                         state = MarkerState(position = LatLng(it.latitude, it.longitude)),
-                        title = "End",
+                        title = it.address ?: "End",
                         icon = BitmapDescriptorFactory.defaultMarker(
                             BitmapDescriptorFactory.HUE_RED
                         )
                     )
                 }
 
-                generatedRoutes.forEachIndexed { index, route ->
+                if (selectedRouteIndex in generatedRoutes.indices) {
+                    val route = generatedRoutes[selectedRouteIndex]
                     if (route.polylinePoints.isNotEmpty()) {
                         Polyline(
                             points = route.polylinePoints,
-                            color = if (index == selectedRouteIndex)
-                                routeColors.getOrElse(index) { Color.Blue }
-                            else
-                                routeColors.getOrElse(index) { Color.Gray }.copy(alpha = 0.4f),
-                            width = if (index == selectedRouteIndex) 14f else 8f
+                            color = routeColors.getOrElse(selectedRouteIndex) { Color.Blue },
+                            width = 14f
                         )
                     }
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 16.dp, end = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (startLocation != null || endLocation != null) {
-                    SmallFloatingActionButton(
-                        onClick = { viewModel.resetMarkers() },
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    ) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Reset markers",
-                            tint = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
+            // Selection mode badge on the map
             if (selectionMode != MapViewModel.SelectionMode.NONE) {
                 val badgeText = when (selectionMode) {
                     MapViewModel.SelectionMode.START -> "Tap to set START"
