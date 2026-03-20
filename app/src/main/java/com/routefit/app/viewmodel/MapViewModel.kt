@@ -254,25 +254,24 @@ class MapViewModel : ViewModel() {
         if (distance <= 0) return
 
         val repo = routeRepository ?: return
-        val targetMeters = DistanceUtils.unitToMeters(distance, _distanceUnit.value)
-        val toleranceMeters = DistanceUtils.milesToMeters(0.25)
+            val targetMeters = DistanceUtils.unitToMeters(distance, _distanceUnit.value)
 
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            _generatedRoutes.value = emptyList()
-            _selectedRouteIndex.value = -1
+            viewModelScope.launch {
+                _isLoading.value = true
+                _error.value = null
+                _generatedRoutes.value = emptyList()
+                _selectedRouteIndex.value = -1
 
-            try {
-                val generator = RouteGenerator(object : RouteGenerator.RouteProvider {
-                    override suspend fun getWalkingRoute(
-                        origin: AppLocation,
-                        destination: AppLocation,
-                        waypoints: List<AppLocation>
-                    ): RouteInfo? = repo.computeWalkingRoute(origin, destination, waypoints)
-                })
+                try {
+                    val generator = RouteGenerator(object : RouteGenerator.RouteProvider {
+                        override suspend fun getWalkingRoute(
+                            origin: AppLocation,
+                            destination: AppLocation,
+                            waypoints: List<AppLocation>
+                        ): RouteInfo? = repo.computeWalkingRoute(origin, destination, waypoints)
+                    })
 
-                val routes = generator.generateRoutes(start, end, targetMeters, toleranceMeters)
+                    val routes = generator.generateRoutes(start, end, targetMeters)
                 _generatedRoutes.value = routes
                 if (routes.isNotEmpty()) {
                     _selectedRouteIndex.value = 0

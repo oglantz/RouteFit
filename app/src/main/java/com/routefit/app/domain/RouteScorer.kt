@@ -18,7 +18,11 @@ class RouteScorer {
         return routes.map { route ->
             val score = calculateScore(route, targetDistanceMeters, start, end)
             route.copy(score = score)
-        }.sortedByDescending { it.score }
+        }.sortedWith(
+            compareBy<RouteInfo> {
+                abs(it.distanceMeters.toDouble() - targetDistanceMeters)
+            }.thenByDescending { it.score }
+        )
     }
 
     private fun calculateScore(
@@ -29,7 +33,7 @@ class RouteScorer {
     ): Double {
         val distanceDelta = abs(route.distanceMeters.toDouble() - targetDistanceMeters)
         val distanceScore =
-            (1.0 - min(1.0, distanceDelta / (0.5 * targetDistanceMeters))).coerceAtLeast(0.0)
+            (1.0 - min(1.0, distanceDelta / (0.2 * targetDistanceMeters))).coerceAtLeast(0.0)
 
         val directDistance = RouteGenerator.haversineDistance(start, end)
         val simplicityScore = if (route.distanceMeters > 0 && directDistance > 0) {
@@ -38,6 +42,7 @@ class RouteScorer {
             0.5
         }
 
-        return 0.7 * distanceScore + 0.3 * simplicityScore
+        // Prioritize target matching first; simplicity is only a tie-breaker.
+        return 0.95 * distanceScore + 0.05 * simplicityScore
     }
 }

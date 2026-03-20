@@ -1,6 +1,5 @@
 package com.routefit.app.data.repository
 
-import android.util.Log
 import com.routefit.app.data.api.RoutesApiService
 import com.routefit.app.data.api.dto.ComputeRoutesRequest
 import com.routefit.app.data.api.dto.LatLngDto
@@ -24,7 +23,8 @@ class RouteRepository(
         val request = ComputeRoutesRequest(
             origin = origin.toWaypointDto(),
             destination = destination.toWaypointDto(),
-            intermediates = waypoints.takeIf { it.isNotEmpty() }?.map { it.toWaypointDto() }
+            // via=true: generated waypoints are pass-through hints, not stops
+            intermediates = waypoints.takeIf { it.isNotEmpty() }?.map { it.toWaypointDto(via = true) }
         )
 
         return try {
@@ -42,9 +42,10 @@ class RouteRepository(
         }
     }
 
-    private fun AppLocation.toWaypointDto() = WaypointDto(
+    private fun AppLocation.toWaypointDto(via: Boolean = false) = WaypointDto(
         location = LocationWrapperDto(
             latLng = LatLngDto(latitude, longitude)
-        )
+        ),
+        via = via
     )
 }
